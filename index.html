@@ -20,11 +20,14 @@
     #btnStart:hover { background: #0369a1; }
     #btnStop { background: #e11d48; color: white; display: none; }
     #chatLog { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
-    .msg { max-width: 85%; padding: 14px 18px; border-radius: 12px; line-height: 1.6; font-size: 1.05rem; }
-    .msg.ai { background: #1e293b; border: 1px solid #334155; align-self: flex-start; color: #f1f5f9; }
+    .msg { max-width: 85%; padding: 16px 20px; border-radius: 12px; line-height: 1.6; }
+    .msg.ai { background: #1e293b; border: 1px solid #334155; align-self: flex-start; color: #f8fafc; }
     .msg.sys { background: transparent; color: #94a3b8; font-size: 0.85rem; align-self: center; text-align: center; }
     .msg.err { background: #450a0a; border: 1px solid #991b1b; color: #fca5a5; font-size: 0.85rem; align-self: center; text-align: center; }
-    .tip { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #475569; color: #fbbf24; font-size: 0.9rem; }
+    .zh-trad { font-size: 1.2rem; font-weight: 600; color: #ffffff; margin-bottom: 4px; }
+    .zh-pinyin { font-size: 0.95rem; color: #38bdf8; margin-bottom: 8px; font-family: monospace, sans-serif; }
+    .ko-mean { font-size: 0.95rem; color: #cbd5e1; padding-top: 8px; border-top: 1px dashed #475569; }
+    .loading-sub { font-size: 0.8rem; color: #64748b; margin-top: 4px; }
     footer { padding: 14px 20px; background: #1e293b; border-top: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: #94a3b8; }
     .mic-indicator { display: flex; align-items: center; gap: 8px; }
     .dot { width: 10px; height: 10px; border-radius: 50%; background: #64748b; }
@@ -34,16 +37,16 @@
 <body>
 
 <header>
-  <h1>🇨🇳 비즈니스 중국어 라이브 파트너</h1>
+  <h1>🇹🇼🇨🇳 비즈니스 중국어 라이브 파트너 (繁體 · 拼音)</h1>
   <span id="statusBadge" class="status">연결 대기중</span>
 </header>
 
 <div class="controls">
   <select id="scenarioSelect">
-    <option value="원자재 가격 상승을 이유로 단가 인상을 요구하는 중국 공급사 대표와 기존 단가 유지 협상하기">1. 단가 인상 방어 및 네고</option>
-    <option value="선적 일정이 일주일 지연된 중국 공장 측에 강하게 항의하고 항공 특송 비용 부담 요구하기">2. 납기 지연 클레임 대응</option>
+    <option value="원자재 가격 상승을 이유로 단가 인상을 요구하는 공급사 대표와 기존 단가 유지 협상하기">1. 단가 인상 방어 및 네고</option>
+    <option value="선적 일정이 일주일 지연된 공장 측에 강하게 항의하고 항공 특송 비용 부담 요구하기">2. 납기 지연 클레임 대응</option>
     <option value="신규 발주할 원단의 후가공(코팅, 광택) 스펙과 최소주문수량(MOQ) 조건 협의하기">3. 샘플 스펙 및 MOQ 협의</option>
-    <option value="중국 현지 출장 중 거래처 대표와 저녁 식사를 하며 업계 동향과 안부 나누기">4. 비즈니스 식사 및 스몰토크</option>
+    <option value="현지 출장 중 거래처 대표와 저녁 식사를 하며 업계 동향과 안부 나누기">4. 비즈니스 식사 및 스몰토크</option>
   </select>
   <input type="password" id="accessCode" placeholder="비밀번호 입력" />
   <button id="btnStart" onclick="startSession()">대화 시작</button>
@@ -56,7 +59,7 @@
 
 <footer>
   <div class="mic-indicator"><div id="micDot" class="dot"></div><span id="micText">마이크 꺼짐</span></div>
-  <div>Gemini Live · 실시간 음성</div>
+  <div>Gemini Live · 번체/병음/해석 자동 지원</div>
 </footer>
 
 <script>
@@ -70,6 +73,7 @@
   let processor = null;
   let nextPlayTime = 0;
   let currentAiBubble = null;
+  let currentTranscript = '';
 
   const savedCode = localStorage.getItem('cn_trade_code');
   if (savedCode) document.getElementById('accessCode').value = savedCode;
@@ -83,24 +87,45 @@
     log.scrollTop = log.scrollHeight;
   }
 
-  function appendAiText(text) {
+  function updateTranscriptBubble(deltaText) {
     const log = document.getElementById('chatLog');
     if (!currentAiBubble) {
       currentAiBubble = document.createElement('div');
       currentAiBubble.className = 'msg ai';
+      currentAiBubble.innerHTML = `<div class="zh-trad"></div><div class="loading-sub">병음 및 한국어 뜻 생성 중...</div>`;
       log.appendChild(currentAiBubble);
     }
-    const fullText = (currentAiBubble.dataset.raw || '') + text;
-    currentAiBubble.dataset.raw = fullText;
-
-    const match = fullText.match(/(\(더 자연스러운 표현:.*?\))/);
-    if (match) {
-      const mainText = fullText.replace(match[0], '').trim();
-      currentAiBubble.innerHTML = `${mainText}<div class="tip">💡 ${match[0]}</div>`;
-    } else {
-      currentAiBubble.innerText = fullText;
-    }
+    currentTranscript += deltaText;
+    currentAiBubble.querySelector('.zh-trad').innerText = currentTranscript;
     log.scrollTop = log.scrollHeight;
+  }
+
+  // 무료 Google 번역/병음 API를 활용해 대화 흐름 방해 없이 즉시 번체 + 병음 + 한국어 뜻 표시
+  async function enrichSubtitle(bubbleEl, rawChinese) {
+    if (!bubbleEl || !rawChinese.trim()) return;
+    try {
+      // 1. 한국어 뜻 및 병음 추출 (dt=t: 번역, dt=rm: 병음 로마자 표기, sl=zh-TW: 번체 기준)
+      const koRes = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ko&dt=t&dt=rm&q=${encodeURIComponent(rawChinese)}`);
+      const koData = await koRes.json();
+      const koText = koData[0].map(item => item[0] || '').join('');
+      const pinyinText = koData[0].map(item => item[3] || item[2] || '').join(' ').trim();
+
+      // 2. 간체가 섞여 나올 경우를 대비해 100% 번체(zh-TW)로 정제
+      const twRes = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-TW&dt=t&q=${encodeURIComponent(rawChinese)}`);
+      const twData = await twRes.json();
+      const tradText = twData[0].map(item => item[0] || '').join('');
+
+      bubbleEl.innerHTML = `
+        <div class="zh-trad">${tradText}</div>
+        ${pinyinText ? `<div class="zh-pinyin">${pinyinText}</div>` : ''}
+        <div class="ko-mean">🇰🇷 ${koText}</div>
+      `;
+      const log = document.getElementById('chatLog');
+      log.scrollTop = log.scrollHeight;
+    } catch (e) {
+      const sub = bubbleEl.querySelector('.loading-sub');
+      if (sub) sub.innerText = '';
+    }
   }
 
   async function startSession() {
@@ -131,7 +156,6 @@
 
       ws.onopen = () => {
         document.getElementById('statusBadge').innerText = '세션 초기화 중...';
-        // 임시 토큰 연결 시 빈 setup 객체를 먼저 전송하여 세션 핸드셰이크 완료
         ws.send(JSON.stringify({ setup: {} }));
       };
 
@@ -139,7 +163,6 @@
         const raw = event.data instanceof Blob ? await event.data.text() : event.data;
         const msg = JSON.parse(raw);
 
-        // 세션 설정 완료(setupComplete) 응답을 받은 뒤 첫 인사 및 마이크 시작
         if (msg.setupComplete !== undefined) {
           document.getElementById('statusBadge').innerText = '실시간 연결됨';
           document.getElementById('statusBadge').classList.add('connected');
@@ -149,7 +172,7 @@
 
           ws.send(JSON.stringify({
             clientContent: {
-              turns: [{ role: 'user', parts: [{ text: '你好！请根据设定的场景，先向我打招呼并开始对话。' }] }],
+              turns: [{ role: 'user', parts: [{ text: '你好！請根據設定的場景，先用繁體中文向我打招呼並開始對話。' }] }],
               turnComplete: true
             }
           }));
@@ -159,16 +182,28 @@
 
         if (msg.serverContent) {
           const sc = msg.serverContent;
+          
+          // 1. 영어 속마음(part.text)은 무시하고 오디오만 재생
           if (sc.modelTurn && sc.modelTurn.parts) {
             for (const part of sc.modelTurn.parts) {
-              if (part.text) appendAiText(part.text);
               if (part.inlineData && part.inlineData.data) {
                 playPcm24k(part.inlineData.data);
               }
             }
           }
+
+          // 2. AI가 실제 음성으로 말한 중국어 자막 수신
+          if (sc.outputTranscription && sc.outputTranscription.text) {
+            updateTranscriptBubble(sc.outputTranscription.text);
+          }
+
+          // 3. 한 턴의 발화가 끝나면 번체 + 병음 + 한국어 뜻 자동 부착
           if (sc.turnComplete) {
+            if (currentAiBubble && currentTranscript) {
+              enrichSubtitle(currentAiBubble, currentTranscript);
+            }
             currentAiBubble = null;
+            currentTranscript = '';
           }
         }
       };
@@ -244,6 +279,7 @@
     if (audioCtx) { audioCtx.close(); audioCtx = null; }
     nextPlayTime = 0;
     currentAiBubble = null;
+    currentTranscript = '';
 
     document.getElementById('statusBadge').innerText = '연결 대기중';
     document.getElementById('statusBadge').classList.remove('connected');
