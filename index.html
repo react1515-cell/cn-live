@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>비즈니스 중국어 라이브 트레이너</title>
+  <title>중국어 라이브 파트너 (비즈니스 & 일상)</title>
   <style>
     * { box-sizing: border-box; font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif; }
     body { margin: 0; background: #0f172a; color: #f8fafc; display: flex; flex-direction: column; height: 100vh; }
@@ -13,7 +13,7 @@
     .status.connected { background: #065f46; color: #34d399; }
     .controls { padding: 16px 20px; background: #1e293b; display: flex; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid #334155; }
     select, input { background: #0f172a; color: #f8fafc; border: 1px solid #475569; padding: 10px 12px; border-radius: 8px; font-size: 0.95rem; }
-    select { flex: 1; min-width: 200px; }
+    select { flex: 1; min-width: 220px; }
     input { width: 140px; }
     button { padding: 10px 20px; border: none; border-radius: 8px; font-weight: 600; font-size: 0.95rem; cursor: pointer; transition: 0.2s; }
     #btnStart { background: #0284c7; color: white; }
@@ -24,7 +24,7 @@
     .msg.ai { background: #1e293b; border: 1px solid #334155; align-self: flex-start; color: #f8fafc; }
     .msg.sys { background: transparent; color: #94a3b8; font-size: 0.85rem; align-self: center; text-align: center; }
     .msg.err { background: #450a0a; border: 1px solid #991b1b; color: #fca5a5; font-size: 0.85rem; align-self: center; text-align: center; }
-    .zh-trad { font-size: 1.2rem; font-weight: 600; color: #ffffff; margin-bottom: 4px; }
+    .zh-simp { font-size: 1.25rem; font-weight: 600; color: #ffffff; margin-bottom: 4px; }
     .zh-pinyin { font-size: 0.95rem; color: #38bdf8; margin-bottom: 8px; font-family: monospace, sans-serif; }
     .ko-mean { font-size: 0.95rem; color: #cbd5e1; padding-top: 8px; border-top: 1px dashed #475569; }
     .loading-sub { font-size: 0.8rem; color: #64748b; margin-top: 4px; }
@@ -37,16 +37,24 @@
 <body>
 
 <header>
-  <h1>🇹🇼🇨🇳 비즈니스 중국어 라이브 파트너 (繁體 · 拼音)</h1>
+  <h1>🇨🇳 중국어 라이브 파트너 (简体 · 拼音)</h1>
   <span id="statusBadge" class="status">연결 대기중</span>
 </header>
 
 <div class="controls">
   <select id="scenarioSelect">
-    <option value="원자재 가격 상승을 이유로 단가 인상을 요구하는 공급사 대표와 기존 단가 유지 협상하기">1. 단가 인상 방어 및 네고</option>
-    <option value="선적 일정이 일주일 지연된 공장 측에 강하게 항의하고 항공 특송 비용 부담 요구하기">2. 납기 지연 클레임 대응</option>
-    <option value="신규 발주할 원단의 후가공(코팅, 광택) 스펙과 최소주문수량(MOQ) 조건 협의하기">3. 샘플 스펙 및 MOQ 협의</option>
-    <option value="현지 출장 중 거래처 대표와 저녁 식사를 하며 업계 동향과 안부 나누기">4. 비즈니스 식사 및 스몰토크</option>
+    <optgroup label="💼 비즈니스 실무 (기초·중급)">
+      <option value="단가가 조금 비싸서 가격을 조금 깎아달라고 가볍게 협상하기">1. 단가 깎아달라고 부탁하기</option>
+      <option value="물건이 언제 도착하는지 납기 일정 확인하기">2. 배송 및 납기 일정 확인하기</option>
+      <option value="원단 샘플이 마음에 들어서 수량과 조건 물어보기">3. 샘플 확인 및 주문 수량 문의</option>
+      <option value="거래처 담당자와 미팅 시작 전 가볍게 안부 묻고 차 마시기">4. 미팅 전 가벼운 스몰토크</option>
+    </optgroup>
+    <optgroup label="☕ 일상생활 회화">
+      <option value="중국 출장 중 식당에서 맛있는 현지 음식 추천받고 주문하기">5. 식당에서 음식 추천받고 주문하기</option>
+      <option value="주말에 무엇을 했는지, 평소 운동이나 취미 생활 이야기하기">6. 주말 일상 및 운동/취미 대화</option>
+      <option value="택시를 타거나 호텔 체크인할 때 기본적인 요청하기">7. 출장 중 택시·호텔 이용하기</option>
+      <option value="주제 없이 편하게 오늘 하루 있었던 일 수다 떨기">8. 자유 주제 일상 프리토킹</option>
+    </optgroup>
   </select>
   <input type="password" id="accessCode" placeholder="비밀번호 입력" />
   <button id="btnStart" onclick="startSession()">대화 시작</button>
@@ -54,12 +62,12 @@
 </div>
 
 <div id="chatLog">
-  <div class="msg sys">🎧 하울링 방지를 위해 반드시 <b>이어폰 또는 헤드셋</b>을 착용한 뒤 [대화 시작]을 눌러주세요.</div>
+  <div class="msg sys">🎧 <b>이어폰 또는 헤드셋</b>을 착용한 뒤 원하는 주제를 고르고 [대화 시작]을 눌러주세요.</div>
 </div>
 
 <footer>
   <div class="mic-indicator"><div id="micDot" class="dot"></div><span id="micText">마이크 꺼짐</span></div>
-  <div>Gemini Live · 번체/병음/해석 자동 지원</div>
+  <div>간체 · 병음 · 한국어 자동 자막</div>
 </footer>
 
 <script>
@@ -92,31 +100,31 @@
     if (!currentAiBubble) {
       currentAiBubble = document.createElement('div');
       currentAiBubble.className = 'msg ai';
-      currentAiBubble.innerHTML = `<div class="zh-trad"></div><div class="loading-sub">병음 및 한국어 뜻 생성 중...</div>`;
+      currentAiBubble.innerHTML = `<div class="zh-simp"></div><div class="loading-sub">병음 및 한국어 뜻 생성 중...</div>`;
       log.appendChild(currentAiBubble);
     }
     currentTranscript += deltaText;
-    currentAiBubble.querySelector('.zh-trad').innerText = currentTranscript;
+    currentAiBubble.querySelector('.zh-simp').innerText = currentTranscript;
     log.scrollTop = log.scrollHeight;
   }
 
-  // 무료 Google 번역/병음 API를 활용해 대화 흐름 방해 없이 즉시 번체 + 병음 + 한국어 뜻 표시
+  // 무료 Google 번역/병음 API로 간체(zh-CN) + 한어병음 + 한국어 뜻 자동 표시
   async function enrichSubtitle(bubbleEl, rawChinese) {
     if (!bubbleEl || !rawChinese.trim()) return;
     try {
-      // 1. 한국어 뜻 및 병음 추출 (dt=t: 번역, dt=rm: 병음 로마자 표기, sl=zh-TW: 번체 기준)
-      const koRes = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ko&dt=t&dt=rm&q=${encodeURIComponent(rawChinese)}`);
+      // 1. 간체(zh-CN)로 깔끔하게 통일
+      const cnRes = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-CN&dt=t&q=${encodeURIComponent(rawChinese)}`);
+      const cnData = await cnRes.json();
+      const simpText = cnData[0].map(item => item[0] || '').join('');
+
+      // 2. 한국어 뜻 및 표준 한어병음 추출
+      const koRes = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-CN&tl=ko&dt=t&dt=rm&q=${encodeURIComponent(simpText)}`);
       const koData = await koRes.json();
       const koText = koData[0].map(item => item[0] || '').join('');
       const pinyinText = koData[0].map(item => item[3] || item[2] || '').join(' ').trim();
 
-      // 2. 간체가 섞여 나올 경우를 대비해 100% 번체(zh-TW)로 정제
-      const twRes = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-TW&dt=t&q=${encodeURIComponent(rawChinese)}`);
-      const twData = await twRes.json();
-      const tradText = twData[0].map(item => item[0] || '').join('');
-
       bubbleEl.innerHTML = `
-        <div class="zh-trad">${tradText}</div>
+        <div class="zh-simp">${simpText}</div>
         ${pinyinText ? `<div class="zh-pinyin">${pinyinText}</div>` : ''}
         <div class="ko-mean">🇰🇷 ${koText}</div>
       `;
@@ -168,11 +176,11 @@
           document.getElementById('statusBadge').classList.add('connected');
           document.getElementById('btnStart').style.display = 'none';
           document.getElementById('btnStop').style.display = 'inline-block';
-          addSystemMsg('✅ 연결되었습니다! AI가 먼저 인사를 건넵니다.');
+          addSystemMsg('✅ 연결되었습니다! AI가 먼저 쉽게 말을 건넵니다.');
 
           ws.send(JSON.stringify({
             clientContent: {
-              turns: [{ role: 'user', parts: [{ text: '你好！請根據設定的場景，先用繁體中文向我打招呼並開始對話。' }] }],
+              turns: [{ role: 'user', parts: [{ text: '你好！请用简单易懂的简体中文，根据设定的场景先向我打招呼，问一个简单的问题。' }] }],
               turnComplete: true
             }
           }));
@@ -183,7 +191,6 @@
         if (msg.serverContent) {
           const sc = msg.serverContent;
           
-          // 1. 영어 속마음(part.text)은 무시하고 오디오만 재생
           if (sc.modelTurn && sc.modelTurn.parts) {
             for (const part of sc.modelTurn.parts) {
               if (part.inlineData && part.inlineData.data) {
@@ -192,12 +199,10 @@
             }
           }
 
-          // 2. AI가 실제 음성으로 말한 중국어 자막 수신
           if (sc.outputTranscription && sc.outputTranscription.text) {
             updateTranscriptBubble(sc.outputTranscription.text);
           }
 
-          // 3. 한 턴의 발화가 끝나면 번체 + 병음 + 한국어 뜻 자동 부착
           if (sc.turnComplete) {
             if (currentAiBubble && currentTranscript) {
               enrichSubtitle(currentAiBubble, currentTranscript);
