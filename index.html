@@ -23,6 +23,7 @@
     .msg { max-width: 85%; padding: 14px 18px; border-radius: 12px; line-height: 1.6; font-size: 1.05rem; }
     .msg.ai { background: #1e293b; border: 1px solid #334155; align-self: flex-start; color: #f1f5f9; }
     .msg.sys { background: transparent; color: #94a3b8; font-size: 0.85rem; align-self: center; text-align: center; }
+    .msg.err { background: #450a0a; border: 1px solid #991b1b; color: #fca5a5; font-size: 0.85rem; align-self: center; text-align: center; }
     .tip { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #475569; color: #fbbf24; font-size: 0.9rem; }
     footer { padding: 14px 20px; background: #1e293b; border-top: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: #94a3b8; }
     .mic-indicator { display: flex; align-items: center; gap: 8px; }
@@ -46,7 +47,7 @@
   </select>
   <input type="password" id="accessCode" placeholder="비밀번호 입력" />
   <button id="btnStart" onclick="startSession()">대화 시작</button>
-  <button id="btnStop" onclick="stopSession()">대화 종료</button>
+  <button id="btnStop" onclick="stopSession('사용자가 대화를 종료했습니다.')">대화 종료</button>
 </div>
 
 <div id="chatLog">
@@ -55,7 +56,7 @@
 
 <footer>
   <div class="mic-indicator"><div id="micDot" class="dot"></div><span id="micText">마이크 꺼짐</span></div>
-  <div>Gemini 3.8 Live · 실시간 음성</div>
+  <div>Gemini Live · 실시간 음성</div>
 </footer>
 
 <script>
@@ -64,18 +65,18 @@
 
   let ws = null;
   let audioCtx = null;
+  let micCtx = null;
   let micStream = null;
   let processor = null;
   let nextPlayTime = 0;
   let currentAiBubble = null;
 
-  // 비밀번호 자동 기억
   const savedCode = localStorage.getItem('cn_trade_code');
   if (savedCode) document.getElementById('accessCode').value = savedCode;
 
-  function addSystemMsg(text) {
+  function addSystemMsg(text, isError = false) {
     const div = document.createElement('div');
-    div.className = 'msg sys';
+    div.className = isError ? 'msg err' : 'msg sys';
     div.innerText = text;
     const log = document.getElementById('chatLog');
     log.appendChild(div);
@@ -92,7 +93,6 @@
     const fullText = (currentAiBubble.dataset.raw || '') + text;
     currentAiBubble.dataset.raw = fullText;
 
-    // 괄호 안의 한국어 피드백(더 자연스러운 표현: ...) 분리 강조
     const match = fullText.match(/(\(더 자연스러운 표현:.*?\))/);
     if (match) {
       const mainText = fullText.replace(match[0], '').trim();
@@ -114,7 +114,6 @@
     addSystemMsg('서버에서 임시 보안 토큰을 발급받는 중...');
 
     try {
-      // 1. Apps Script 서버에서 임시 토큰 발급
       const res = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         body: JSON.stringify({ code, scenario })
@@ -122,36 +121,41 @@
       const data = await res.json();
       if (data.error) throw new Error(data.error);
 
-      // 2. 오디오 컨텍스트 및 마이크 준비
       audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
       micStream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 }
       });
 
-      // 3. Gemini Live WebSocket 연결
       const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=${encodeURIComponent(data.token)}`;
       ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
-        document.getElementById('statusBadge').innerText = '실시간 연결됨';
-        document.getElementById('statusBadge').classList.add('connected');
-        document.getElementById('btnStart').style.display = 'none';
-        document.getElementById('btnStop').style.display = 'inline-block';
-        addSystemMsg('✅ 연결되었습니다! AI가 먼저 인사를 건넵니다.');
-
-        // 첫 인사 유도 메시지 전송
-        ws.send(JSON.stringify({
-          clientContent: {
-            turns: [{ role: 'user', parts: [{ text: '你好！请根据设定的场景，先向我打招呼并开始对话。' }] }],
-            turnComplete: true
-          }
-        }));
-        startMicStreaming();
+        document.getElementById('statusBadge').innerText = '세션 초기화 중...';
+        // 임시 토큰 연결 시 빈 setup 객체를 먼저 전송하여 세션 핸드셰이크 완료
+        ws.send(JSON.stringify({ setup: {} }));
       };
 
       ws.onmessage = async (event) => {
         const raw = event.data instanceof Blob ? await event.data.text() : event.data;
         const msg = JSON.parse(raw);
+
+        // 세션 설정 완료(setupComplete) 응답을 받은 뒤 첫 인사 및 마이크 시작
+        if (msg.setupComplete !== undefined) {
+          document.getElementById('statusBadge').innerText = '실시간 연결됨';
+          document.getElementById('statusBadge').classList.add('connected');
+          document.getElementById('btnStart').style.display = 'none';
+          document.getElementById('btnStop').style.display = 'inline-block';
+          addSystemMsg('✅ 연결되었습니다! AI가 먼저 인사를 건넵니다.');
+
+          ws.send(JSON.stringify({
+            clientContent: {
+              turns: [{ role: 'user', parts: [{ text: '你好！请根据设定的场景，先向我打招呼并开始对话。' }] }],
+              turnComplete: true
+            }
+          }));
+          startMicStreaming();
+          return;
+        }
 
         if (msg.serverContent) {
           const sc = msg.serverContent;
@@ -169,18 +173,24 @@
         }
       };
 
-      ws.onclose = () => stopSession('연결이 종료되었습니다.');
-      ws.onerror = (err) => { console.error(err); stopSession('통신 오류가 발생했습니다.'); };
+      ws.onclose = (ev) => {
+        const reasonText = ev.reason ? `사유: ${ev.reason}` : '사유 없음';
+        stopSession(`연결 종료 (코드: ${ev.code}, ${reasonText})`, ev.code !== 1000);
+      };
+
+      ws.onerror = (err) => {
+        console.error(err);
+        addSystemMsg('웹소켓 통신 에러가 감지되었습니다.', true);
+      };
 
     } catch (err) {
-      alert('연결 실패: ' + err.message);
+      addSystemMsg('연결 실패: ' + err.message, true);
       document.getElementById('btnStart').disabled = false;
     }
   }
 
-  // 마이크 음성을 16kHz PCM으로 변환해 전송
   function startMicStreaming() {
-    const micCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+    micCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
     const source = micCtx.createMediaStreamSource(micStream);
     processor = micCtx.createScriptProcessor(4096, 1, 1);
 
@@ -204,7 +214,6 @@
     document.getElementById('micText').innerText = '마이크 켜짐 (말씀하세요)';
   }
 
-  // AI가 보낸 24kHz PCM 오디오 재생
   function playPcm24k(base64Data) {
     if (!audioCtx) return;
     const binary = atob(base64Data);
@@ -227,10 +236,11 @@
     nextPlayTime += buffer.duration;
   }
 
-  function stopSession(reason = '대화를 종료했습니다.') {
-    if (ws) { ws.close(); ws = null; }
+  function stopSession(reason = '대화를 종료했습니다.', isError = false) {
+    if (ws) { ws.onclose = null; ws.close(); ws = null; }
     if (processor) { processor.disconnect(); processor = null; }
     if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+    if (micCtx) { micCtx.close(); micCtx = null; }
     if (audioCtx) { audioCtx.close(); audioCtx = null; }
     nextPlayTime = 0;
     currentAiBubble = null;
@@ -242,7 +252,7 @@
     document.getElementById('btnStart').style.display = 'inline-block';
     document.getElementById('btnStart').disabled = false;
     document.getElementById('btnStop').style.display = 'none';
-    addSystemMsg(reason);
+    addSystemMsg(reason, isError);
   }
 </script>
 </body>
