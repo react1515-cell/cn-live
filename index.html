@@ -20,11 +20,13 @@
     #btnStart:hover { background: #0369a1; }
     #btnStop { background: #e11d48; color: white; display: none; }
     #chatLog { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
-    .msg { max-width: 85%; padding: 16px 20px; border-radius: 12px; line-height: 1.6; }
+    .msg { max-width: 85%; padding: 14px 18px; border-radius: 12px; line-height: 1.6; }
     .msg.ai { background: #1e293b; border: 1px solid #334155; align-self: flex-start; color: #f8fafc; }
+    .msg.user { background: #0369a1; border: 1px solid #0284c7; align-self: flex-end; color: #ffffff; }
+    .msg.user .label { font-size: 0.75rem; color: #bae6fd; margin-bottom: 4px; }
     .msg.sys { background: transparent; color: #94a3b8; font-size: 0.85rem; align-self: center; text-align: center; }
     .msg.err { background: #450a0a; border: 1px solid #991b1b; color: #fca5a5; font-size: 0.85rem; align-self: center; text-align: center; }
-    .zh-simp { font-size: 1.25rem; font-weight: 600; color: #ffffff; margin-bottom: 4px; }
+    .zh-simp { font-size: 1.2rem; font-weight: 600; color: #ffffff; margin-bottom: 4px; }
     .zh-pinyin { font-size: 0.95rem; color: #38bdf8; margin-bottom: 8px; font-family: monospace, sans-serif; }
     .ko-mean { font-size: 0.95rem; color: #cbd5e1; padding-top: 8px; border-top: 1px dashed #475569; }
     .loading-sub { font-size: 0.8rem; color: #64748b; margin-top: 4px; }
@@ -67,7 +69,7 @@
 
 <footer>
   <div class="mic-indicator"><div id="micDot" class="dot"></div><span id="micText">마이크 꺼짐</span></div>
-  <div>간체 · 병음 · 한국어 자동 자막</div>
+  <div>내 발음 인식 + 간체/병음/해석 지원</div>
 </footer>
 
 <script>
@@ -80,8 +82,12 @@
   let micStream = null;
   let processor = null;
   let nextPlayTime = 0;
+
   let currentAiBubble = null;
-  let currentTranscript = '';
+  let currentAiTranscript = '';
+
+  let currentUserBubble = null;
+  let currentUserTranscript = '';
 
   const savedCode = localStorage.getItem('cn_trade_code');
   if (savedCode) document.getElementById('accessCode').value = savedCode;
@@ -95,7 +101,22 @@
     log.scrollTop = log.scrollHeight;
   }
 
-  function updateTranscriptBubble(deltaText) {
+  // 내가 말한 음성 인식 말풍선 업데이트 (오른쪽 파란색)
+  function updateUserBubble(deltaText) {
+    const log = document.getElementById('chatLog');
+    if (!currentUserBubble) {
+      currentUserBubble = document.createElement('div');
+      currentUserBubble.className = 'msg user';
+      currentUserBubble.innerHTML = `<div class="label">🎙️ 내 발음 인식</div><div class="zh-simp"></div>`;
+      log.appendChild(currentUserBubble);
+    }
+    currentUserTranscript += deltaText;
+    currentUserBubble.querySelector('.zh-simp').innerText = currentUserTranscript;
+    log.scrollTop = log.scrollHeight;
+  }
+
+  // AI 대답 말풍선 업데이트 (왼쪽 어두운색)
+  function updateAiBubble(deltaText) {
     const log = document.getElementById('chatLog');
     if (!currentAiBubble) {
       currentAiBubble = document.createElement('div');
@@ -103,21 +124,18 @@
       currentAiBubble.innerHTML = `<div class="zh-simp"></div><div class="loading-sub">병음 및 한국어 뜻 생성 중...</div>`;
       log.appendChild(currentAiBubble);
     }
-    currentTranscript += deltaText;
-    currentAiBubble.querySelector('.zh-simp').innerText = currentTranscript;
+    currentAiTranscript += deltaText;
+    currentAiBubble.querySelector('.zh-simp').innerText = currentAiTranscript;
     log.scrollTop = log.scrollHeight;
   }
 
-  // 무료 Google 번역/병음 API로 간체(zh-CN) + 한어병음 + 한국어 뜻 자동 표시
   async function enrichSubtitle(bubbleEl, rawChinese) {
     if (!bubbleEl || !rawChinese.trim()) return;
     try {
-      // 1. 간체(zh-CN)로 깔끔하게 통일
       const cnRes = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-CN&dt=t&q=${encodeURIComponent(rawChinese)}`);
       const cnData = await cnRes.json();
       const simpText = cnData[0].map(item => item[0] || '').join('');
 
-      // 2. 한국어 뜻 및 표준 한어병음 추출
       const koRes = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-CN&tl=ko&dt=t&dt=rm&q=${encodeURIComponent(simpText)}`);
       const koData = await koRes.json();
       const koText = koData[0].map(item => item[0] || '').join('');
@@ -199,16 +217,24 @@
             }
           }
 
+          // 1. 내가 말한 음성 인식 결과 수신
+          if (sc.inputTranscription && sc.inputTranscription.text) {
+            updateUserBubble(sc.inputTranscription.text);
+          }
+
+          // 2. AI가 말한 음성 자막 수신 (AI가 말하기 시작하면 내 말풍선 턴은 종료)
           if (sc.outputTranscription && sc.outputTranscription.text) {
-            updateTranscriptBubble(sc.outputTranscription.text);
+            currentUserBubble = null;
+            currentUserTranscript = '';
+            updateAiBubble(sc.outputTranscription.text);
           }
 
           if (sc.turnComplete) {
-            if (currentAiBubble && currentTranscript) {
-              enrichSubtitle(currentAiBubble, currentTranscript);
+            if (currentAiBubble && currentAiTranscript) {
+              enrichSubtitle(currentAiBubble, currentAiTranscript);
             }
             currentAiBubble = null;
-            currentTranscript = '';
+            currentAiTranscript = '';
           }
         }
       };
@@ -284,7 +310,9 @@
     if (audioCtx) { audioCtx.close(); audioCtx = null; }
     nextPlayTime = 0;
     currentAiBubble = null;
-    currentTranscript = '';
+    currentAiTranscript = '';
+    currentUserBubble = null;
+    currentUserTranscript = '';
 
     document.getElementById('statusBadge').innerText = '연결 대기중';
     document.getElementById('statusBadge').classList.remove('connected');
