@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>비즈니스 중국어 라이브 트레이너</title>
+  <style>
+    * { box-sizing: border-box; font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif; }
+    body { margin: 0; background: #0f172a; color: #f8fafc; display: flex; flex-direction: column; height: 100vh; }
+    header { background: #1e293b; padding: 16px 20px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
+    header h1 { margin: 0; font-size: 1.1rem; color: #38bdf8; }
+    .status { font-size: 0.85rem; padding: 4px 10px; border-radius: 999px; background: #334155; color: #94a3b8; }
+    .status.connected { background: #065f46; color: #34d399; }
+    .controls { padding: 16px 20px; background: #1e293b; display: flex; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid #334155; }
+    select, input { background: #0f172a; color: #f8fafc; border: 1px solid #475569; padding: 10px 12px; border-radius: 8px; font-size: 0.95rem; }
+    select { flex: 1; min-width: 200px; }
+    input { width: 140px; }
+    button { padding: 10px 20px; border: none; border-radius: 8px; font-weight: 600; font-size: 0.95rem; cursor: pointer; transition: 0.2s; }
+    #btnStart { background: #0284c7; color: white; }
+    #btnStart:hover { background: #0369a1; }
+    #btnStop { background: #e11d48; color: white; display: none; }
+    #chatLog { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+    .msg { max-width: 85%; padding: 14px 18px; border-radius: 12px; line-height: 1.6; font-size: 1.05rem; }
+    .msg.ai { background: #1e293b; border: 1px solid #334155; align-self: flex-start; color: #f1f5f9; }
+    .msg.sys { background: transparent; color: #94a3b8; font-size: 0.85rem; align-self: center; text-align: center; }
+    .tip { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #475569; color: #fbbf24; font-size: 0.9rem; }
+    footer { padding: 14px 20px; background: #1e293b; border-top: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: #94a3b8; }
+    .mic-indicator { display: flex; align-items: center; gap: 8px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: #64748b; }
+    .dot.active { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🇨🇳 비즈니스 중국어 라이브 파트너</h1>
+  <span id="statusBadge" class="status">연결 대기중</span>
+</header>
+
+<div class="controls">
+  <select id="scenarioSelect">
+    <option value="원자재 가격 상승을 이유로 단가 인상을 요구하는 중국 공급사 대표와 기존 단가 유지 협상하기">1. 단가 인상 방어 및 네고</option>
+    <option value="선적 일정이 일주일 지연된 중국 공장 측에 강하게 항의하고 항공 특송 비용 부담 요구하기">2. 납기 지연 클레임 대응</option>
+    <option value="신규 발주할 원단의 후가공(코팅, 광택) 스펙과 최소주문수량(MOQ) 조건 협의하기">3. 샘플 스펙 및 MOQ 협의</option>
+    <option value="중국 현지 출장 중 거래처 대표와 저녁 식사를 하며 업계 동향과 안부 나누기">4. 비즈니스 식사 및 스몰토크</option>
+  </select>
+  <input type="password" id="accessCode" placeholder="비밀번호 입력" />
+  <button id="btnStart" onclick="startSession()">대화 시작</button>
+  <button id="btnStop" onclick="stopSession()">대화 종료</button>
+</div>
+
+<div id="chatLog">
+  <div class="msg sys">🎧 하울링 방지를 위해 반드시 <b>이어폰 또는 헤드셋</b>을 착용한 뒤 [대화 시작]을 눌러주세요.</div>
+</div>
+
+<footer>
+  <div class="mic-indicator"><div id="micDot" class="dot"></div><span id="micText">마이크 꺼짐</span></div>
+  <div>Gemini 3.8 Live · 실시간 음성</div>
+</footer>
+
+<script>
+  // ▼▼▼ 아래 작은따옴표 안에 복사해 둔 Apps Script 웹 앱 URL을 붙여넣으세요 ▼▼▼
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyTikvgzO00McK5Wg12BiD-Qk55OGVv_7iPWSzlbsb-CIA7SqrpO4s3e30ImeX6WsCu/exec';
+
+  let ws = null;
+  let audioCtx = null;
+  let micStream = null;
+  let processor = null;
+  let nextPlayTime = 0;
+  let currentAiBubble = null;
+
+  // 비밀번호 자동 기억
+  const savedCode = localStorage.getItem('cn_trade_code');
+  if (savedCode) document.getElementById('accessCode').value = savedCode;
+
+  function addSystemMsg(text) {
+    const div = document.createElement('div');
+    div.className = 'msg sys';
+    div.innerText = text;
+    const log = document.getElementById('chatLog');
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function appendAiText(text) {
+    const log = document.getElementById('chatLog');
+    if (!currentAiBubble) {
+      currentAiBubble = document.createElement('div');
+      currentAiBubble.className = 'msg ai';
+      log.appendChild(currentAiBubble);
+    }
+    const fullText = (currentAiBubble.dataset.raw || '') + text;
+    currentAiBubble.dataset.raw = fullText;
+
+    // 괄호 안의 한국어 피드백(더 자연스러운 표현: ...) 분리 강조
+    const match = fullText.match(/(\(더 자연스러운 표현:.*?\))/);
+    if (match) {
+      const mainText = fullText.replace(match[0], '').trim();
+      currentAiBubble.innerHTML = `${mainText}<div class="tip">💡 ${match[0]}</div>`;
+    } else {
+      currentAiBubble.innerText = fullText;
+    }
+    log.scrollTop = log.scrollHeight;
+  }
+
+  async function startSession() {
+    const code = document.getElementById('accessCode').value.trim();
+    const scenario = document.getElementById('scenarioSelect').value;
+    if (!code) return alert('Apps Script에 설정한 비밀번호(ACCESS_CODE)를 입력해주세요.');
+    if (APPS_SCRIPT_URL.includes('여기에_복사한')) return alert('코드 상단의 APPS_SCRIPT_URL에 웹 앱 주소를 먼저 넣어주세요.');
+
+    localStorage.setItem('cn_trade_code', code);
+    document.getElementById('btnStart').disabled = true;
+    addSystemMsg('서버에서 임시 보안 토큰을 발급받는 중...');
+
+    try {
+      // 1. Apps Script 서버에서 임시 토큰 발급
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ code, scenario })
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      // 2. 오디오 컨텍스트 및 마이크 준비
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 }
+      });
+
+      // 3. Gemini Live WebSocket 연결
+      const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=${encodeURIComponent(data.token)}`;
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        document.getElementById('statusBadge').innerText = '실시간 연결됨';
+        document.getElementById('statusBadge').classList.add('connected');
+        document.getElementById('btnStart').style.display = 'none';
+        document.getElementById('btnStop').style.display = 'inline-block';
+        addSystemMsg('✅ 연결되었습니다! AI가 먼저 인사를 건넵니다.');
+
+        // 첫 인사 유도 메시지 전송
+        ws.send(JSON.stringify({
+          clientContent: {
+            turns: [{ role: 'user', parts: [{ text: '你好！请根据设定的场景，先向我打招呼并开始对话。' }] }],
+            turnComplete: true
+          }
+        }));
+        startMicStreaming();
+      };
+
+      ws.onmessage = async (event) => {
+        const raw = event.data instanceof Blob ? await event.data.text() : event.data;
+        const msg = JSON.parse(raw);
+
+        if (msg.serverContent) {
+          const sc = msg.serverContent;
+          if (sc.modelTurn && sc.modelTurn.parts) {
+            for (const part of sc.modelTurn.parts) {
+              if (part.text) appendAiText(part.text);
+              if (part.inlineData && part.inlineData.data) {
+                playPcm24k(part.inlineData.data);
+              }
+            }
+          }
+          if (sc.turnComplete) {
+            currentAiBubble = null;
+          }
+        }
+      };
+
+      ws.onclose = () => stopSession('연결이 종료되었습니다.');
+      ws.onerror = (err) => { console.error(err); stopSession('통신 오류가 발생했습니다.'); };
+
+    } catch (err) {
+      alert('연결 실패: ' + err.message);
+      document.getElementById('btnStart').disabled = false;
+    }
+  }
+
+  // 마이크 음성을 16kHz PCM으로 변환해 전송
+  function startMicStreaming() {
+    const micCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+    const source = micCtx.createMediaStreamSource(micStream);
+    processor = micCtx.createScriptProcessor(4096, 1, 1);
+
+    processor.onaudioprocess = (e) => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      const input = e.inputBuffer.getChannelData(0);
+      const pcm16 = new Int16Array(input.length);
+      for (let i = 0; i < input.length; i++) {
+        const s = Math.max(-1, Math.min(1, input[i]));
+        pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      }
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(pcm16.buffer)));
+      ws.send(JSON.stringify({
+        realtimeInput: { mediaChunks: [{ mimeType: 'audio/pcm;rate=16000', data: base64 }] }
+      }));
+    };
+
+    source.connect(processor);
+    processor.connect(micCtx.destination);
+    document.getElementById('micDot').classList.add('active');
+    document.getElementById('micText').innerText = '마이크 켜짐 (말씀하세요)';
+  }
+
+  // AI가 보낸 24kHz PCM 오디오 재생
+  function playPcm24k(base64Data) {
+    if (!audioCtx) return;
+    const binary = atob(base64Data);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const int16 = new Int16Array(bytes.buffer);
+    const float32 = new Float32Array(int16.length);
+    for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768.0;
+
+    const buffer = audioCtx.createBuffer(1, float32.length, 24000);
+    buffer.getChannelData(0).set(float32);
+
+    const source = audioCtx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audioCtx.destination);
+
+    const now = audioCtx.currentTime;
+    if (nextPlayTime < now) nextPlayTime = now;
+    source.start(nextPlayTime);
+    nextPlayTime += buffer.duration;
+  }
+
+  function stopSession(reason = '대화를 종료했습니다.') {
+    if (ws) { ws.close(); ws = null; }
+    if (processor) { processor.disconnect(); processor = null; }
+    if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+    if (audioCtx) { audioCtx.close(); audioCtx = null; }
+    nextPlayTime = 0;
+    currentAiBubble = null;
+
+    document.getElementById('statusBadge').innerText = '연결 대기중';
+    document.getElementById('statusBadge').classList.remove('connected');
+    document.getElementById('micDot').classList.remove('active');
+    document.getElementById('micText').innerText = '마이크 꺼짐';
+    document.getElementById('btnStart').style.display = 'inline-block';
+    document.getElementById('btnStart').disabled = false;
+    document.getElementById('btnStop').style.display = 'none';
+    addSystemMsg(reason);
+  }
+</script>
+</body>
+</html>
